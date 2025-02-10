@@ -5,7 +5,6 @@ from streamlit_feedback import streamlit_feedback
 import os
 import json
 from datetime import datetime
-from sample_captions import SAMPLE_CAPTIONS
 
 # Initialize session state for API key and OpenAI client
 if 'api_key' not in st.session_state:
