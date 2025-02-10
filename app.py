@@ -10,16 +10,40 @@ from sample_captions import SAMPLE_CAPTIONS
 if 'api_key' not in st.session_state:
     st.session_state.api_key = None
 
+def emoji_to_score(emoji):
+    """Convert emoji rating to 1-5 Likert scale"""
+    emoji_map = {
+        "😞": 1,  # Very unhappy
+        "🙁": 2,  # Unhappy
+        "😐": 3,  # Neutral
+        "🙂": 4,  # Happy
+        "😀": 5   # Very happy
+    }
+    return emoji_map.get(emoji, 3)  # Default to neutral if emoji not found
+
 def save_feedback_data(video_id, data):
     """Save feedback data to a JSON file"""
     os.makedirs('outputs', exist_ok=True)
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    filename = f'outputs/{video_id}_{timestamp}.json'
+    filename = f'outputs/{video_id}.json'
+    
+    # Add numeric ratings
+    if "feedback_rating" in data:
+        data["feedback_rating_score"] = emoji_to_score(data["feedback_rating"])
+    if "caption_rating" in data:
+        data["caption_rating_score"] = emoji_to_score(data["caption_rating"])
     
     with open(filename, 'w') as f:
         json.dump(data, f, indent=4)
     
     return filename
+
+def load_feedback_data(video_id):
+    """Load existing feedback data for a video if it exists"""
+    filename = f'outputs/{video_id}.json'
+    if os.path.exists(filename):
+        with open(filename, 'r') as f:
+            return json.load(f)
+    return None
 
 # List of video URLs
 VIDEO_URLS = [
@@ -69,12 +93,16 @@ def get_gpt4_caption(feedback, original_caption):
     return response.choices[0].message.content.strip()
 
 def main():
+    # Hide sidebar by default
+    st.set_page_config(initial_sidebar_state="collapsed")
+    
     st.title("Video Caption Feedback System")
     
     # Debug information
-    st.sidebar.write(f"Current Step: {st.session_state.get('current_step', 0)}")
-    if 'feedback_data' in st.session_state:
-        st.sidebar.write("Feedback Data Keys:", list(st.session_state.feedback_data.keys()))
+    st.sidebar.header("Debug Information")
+    st.sidebar.write("Full Session State:")
+    for key, value in st.session_state.items():
+        st.sidebar.write(f"{key}: {value}")
     
     # API Key input
     api_key = st.text_input("Enter your OpenAI API Key:", type="password")
@@ -106,17 +134,54 @@ def main():
     selected_video = st.selectbox("Select a video:", VIDEO_URLS)
     video_id = get_video_id(selected_video)
     
-    # Display video
-    st.video(selected_video)
+    # Track video changes to reset state
+    if 'last_video_id' not in st.session_state:
+        st.session_state.last_video_id = video_id
+    elif st.session_state.last_video_id != video_id:
+        # Video changed, reset all state variables
+        # First, collect all keys to remove
+        keys_to_remove = []
+        for key in st.session_state:
+            # Keep api_key and last_video_id
+            if key not in ['api_key', 'last_video_id']:
+                keys_to_remove.append(key)
+        
+        # Remove all collected keys
+        for key in keys_to_remove:
+            del st.session_state[key]
+        
+        # Set the new video id
+        st.session_state.last_video_id = video_id
+        
+        # Also clear any feedback component states
+        if 'feedback_submitted_initial_caption_faces' in st.session_state:
+            del st.session_state['feedback_submitted_initial_caption_faces']
+        
+        st.rerun()  # Force a rerun to ensure clean state
     
     # Display instructions
     st.subheader("Instructions")
     st.write(load_instructions())
     
-    # Display original caption
+    # Display video
+    st.video(selected_video)
+    
+    # Check for existing feedback and get current caption
+    existing_feedback = load_feedback_data(video_id)
+    
+    # Show existing feedback if available
+    if existing_feedback:
+        st.info("Previous feedback found for this video")
+        st.json(existing_feedback)
+    
+    # Display current caption
     st.subheader("Current Caption")
-    original_caption = SAMPLE_CAPTIONS.get(video_id, "No caption available")
-    st.write(original_caption)
+    if existing_feedback and existing_feedback.get("final_caption"):
+        current_caption = existing_feedback["final_caption"]
+        st.info("Using previously approved caption")
+    else:
+        current_caption = SAMPLE_CAPTIONS.get(video_id, "No caption available")
+    st.write(current_caption)
     
     # Display conversation history
     if st.session_state.feedback_data:
@@ -141,24 +206,65 @@ def main():
             st.markdown("**Final Caption:**")
             st.write(st.session_state.feedback_data["final_caption"])
     
-    # Step 0: Get initial user feedback
+    # Step 0: Rate the initial caption
     if st.session_state.current_step == 0:
-        user_feedback = st.text_area("Please provide your feedback on this caption:")
+        st.write("Please rate the current caption:")
         
-        if st.button("Submit Initial Feedback") and user_feedback:
+        # Fetch stored initial rating if it exists
+        if "initial_caption_rating" in st.session_state:
+            score = st.session_state.initial_caption_rating
+        else:
+            initial_rating_response = streamlit_feedback(
+                feedback_type="faces",
+                key="initial_caption_faces"
+            )
+
+            if initial_rating_response and 'score' in initial_rating_response:
+                st.session_state.initial_caption_rating = initial_rating_response['score']
+                score = initial_rating_response['score']
+            else:
+                score = None
+
+        if score:
+            feedback_is_needed = score != "😀"
+            
             # Initialize feedback data
             st.session_state.feedback_data = {
                 "video_id": video_id,
-                "original_caption": original_caption,
-                "initial_feedback": user_feedback,
-                "timestamp": datetime.now().isoformat()
+                "original_caption": current_caption,
+                "initial_caption_rating": score,
+                "initial_caption_rating_score": emoji_to_score(score),
+                "feedback_is_needed": feedback_is_needed,
+                "timestamp": datetime.now().isoformat(),
+                # Initialize other fields as None
+                "initial_feedback": None,
+                "gpt_feedback": None,
+                "feedback_rating": None,
+                "feedback_rating_score": None,
+                "final_feedback": None,
+                "gpt_caption": None,
+                "caption_rating": None,
+                "caption_rating_score": None,
+                "final_caption": None
             }
             
-            # Get GPT-4 polished feedback
-            gpt_feedback = get_gpt4_feedback(user_feedback, original_caption)
-            st.session_state.feedback_data["gpt_feedback"] = gpt_feedback
-            st.session_state.current_step = 1
-            st.rerun()
+            if feedback_is_needed:
+                st.write("Please provide your feedback to improve this caption:")
+                user_feedback = st.text_area("Your feedback:")
+                
+                if st.button("Submit Feedback") and user_feedback:
+                    st.session_state.feedback_data["initial_feedback"] = user_feedback
+                    # Get GPT-4 polished feedback
+                    gpt_feedback = get_gpt4_feedback(user_feedback, current_caption)
+                    st.session_state.feedback_data["gpt_feedback"] = gpt_feedback
+                    st.session_state.current_step = 1
+                    st.rerun()
+            else:
+                # If happiest face, save and finish
+                st.session_state.feedback_data["final_caption"] = current_caption
+                filename = save_feedback_data(video_id, st.session_state.feedback_data)
+                st.success("Caption rated as perfect! No changes needed.")
+                st.json(st.session_state.feedback_data)
     
     # Step 1: Rate GPT's feedback and optionally provide corrected feedback
     elif st.session_state.current_step == 1:
@@ -232,7 +338,7 @@ def main():
         # Get the final feedback (either corrected or GPT's version)
         final_feedback = st.session_state.feedback_data["final_feedback"]
         # Get improved caption
-        gpt_caption = get_gpt4_caption(final_feedback, original_caption)
+        gpt_caption = get_gpt4_caption(final_feedback, current_caption)
         st.session_state.feedback_data["gpt_caption"] = gpt_caption
         # Move to caption rating step
         st.session_state.current_step = 3
@@ -283,25 +389,15 @@ def main():
                         
                         # Save feedback data
                         filename = save_feedback_data(st.session_state.feedback_data["video_id"], st.session_state.feedback_data)
-                        st.success(f"Feedback saved successfully to {filename}")
-
-                        # Reset session state for new feedback cycle
-                        st.session_state.current_step = 0
-                        st.session_state.feedback_data = {}
-                        st.session_state.caption_rating = None  # Clear rating state
-                        st.rerun()
+                        st.success(f"Feedback saved successfully!")
+                        st.json(st.session_state.feedback_data)
 
             else:
                 # If rating is happy, finalize caption and save
                 st.session_state.feedback_data["final_caption"] = st.session_state.feedback_data["gpt_caption"]
                 filename = save_feedback_data(st.session_state.feedback_data["video_id"], st.session_state.feedback_data)
-                st.success(f"Feedback saved successfully to {filename}")
-
-                # Reset session state for new feedback cycle
-                st.session_state.current_step = 0
-                st.session_state.feedback_data = {}
-                st.session_state.caption_rating = None  # Clear rating state
-                st.rerun()
+                st.success(f"Feedback saved successfully!")
+                st.json(st.session_state.feedback_data)
 
 
 if __name__ == "__main__":
