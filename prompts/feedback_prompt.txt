@@ -1,6 +1,6 @@
-Given a video caption and user feedback, please analyze and provide a polished version of the feedback that maintains the core message but improves clarity and professionalism. Note that the user feedback could be poorly written or very brief, so please try your best to guess what it means.
+Given a video caption and user feedback, rewrite the feedback to enhance clarity, professionalism, and completeness while preserving its original intent. If the feedback is vague, overly brief, or poorly written, infer the likely meaning and refine it accordingly.
 
-Original caption: "{original_caption}"
-User feedback: "{feedback}"
+Original caption: {original_caption}
+User feedback: {feedback}
 
-Please respond with just the polished feedback, no JSON formatting needed.
+Respond with only the polished feedback, without JSON formatting or additional commentary.

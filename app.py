@@ -1,4 +1,5 @@
 import streamlit as st
+import argparse
 from openai import OpenAI
 from streamlit_feedback import streamlit_feedback
 import os
@@ -10,6 +11,27 @@ from sample_captions import SAMPLE_CAPTIONS
 if 'api_key' not in st.session_state:
     st.session_state.api_key = None
 
+# Argument parsing
+def parse_args():
+    parser = argparse.ArgumentParser(description="Video Caption Feedback System")
+    parser.add_argument("--config", type=str, default="configs/test.json", help="Path to the JSON config file")
+    parser.add_argument("--output", type=str, default="outputs", help="Path to the output directory")
+    parser.add_argument("--feedback_prompt", type=str, default="prompts/feedback_prompt.txt", help="Path to the feedback prompt file")
+    parser.add_argument("--caption_prompt", type=str, default="prompts/caption_prompt.txt", help="Path to the caption prompt file")
+    return parser.parse_args()
+
+# Load configuration from a JSON file
+def load_config(config_path):
+    with open(config_path, "r") as f:
+        return json.load(f)
+
+# Load JSON data from a given file
+def load_json(file_path):
+    if os.path.exists(file_path):
+        with open(file_path, "r") as f:
+            return json.load(f)
+    return {}
+
 def emoji_to_score(emoji):
     """Convert emoji rating to 1-5 Likert scale"""
     emoji_map = {
@@ -19,18 +41,15 @@ def emoji_to_score(emoji):
         "🙂": 4,  # Happy
         "😀": 5   # Very happy
     }
-    return emoji_map.get(emoji, 3)  # Default to neutral if emoji not found
+    # If not found, raise an error
+    if emoji not in emoji_map:
+        raise ValueError("Invalid emoji rating provided.")
+    return emoji_map.get(emoji, None)  # Default to neutral if emoji not found
 
-def save_feedback_data(video_id, data):
+def save_feedback_data(video_id, data, output_dir="outputs"):
     """Save feedback data to a JSON file"""
-    os.makedirs('outputs', exist_ok=True)
-    filename = f'outputs/{video_id}.json'
-    
-    # Add numeric ratings
-    if "feedback_rating" in data:
-        data["feedback_rating_score"] = emoji_to_score(data["feedback_rating"])
-    if "caption_rating" in data:
-        data["caption_rating_score"] = emoji_to_score(data["caption_rating"])
+    os.makedirs(output_dir, exist_ok=True)
+    filename = os.path.join(output_dir, f'{video_id}.json')
     
     with open(filename, 'w') as f:
         json.dump(data, f, indent=4)
@@ -45,27 +64,24 @@ def load_feedback_data(video_id):
             return json.load(f)
     return None
 
-# List of video URLs
-VIDEO_URLS = [
-    "https://dqs0aptimu8jn.cloudfront.net/Gel59Iy3YhQ.0.3.mp4",
-    "https://dqs0aptimu8jn.cloudfront.net/GdRJCTR1KDQ.0.6.mp4",
-    "https://huggingface.co/datasets/Rapidata/sora-video-generation-aligned-words/blob/main/Videos/017_20250114_sora.mp4"
-]
 
+# Get video ID from URL
 def get_video_id(url):
     return url.split('/')[-1]
 
-def load_instructions():
-    with open('instructions.txt', 'r') as f:
+# Load instructions from file
+def load_instructions(instruction_file):
+    with open(instruction_file, "r") as f:
         return f.read()
 
+# Load prompt template
 def load_prompt(filename, **kwargs):
-    with open(f'prompts/{filename}', 'r') as f:
+    with open(filename, "r") as f:
         prompt = f.read()
     return prompt.format(**kwargs)
 
-def get_gpt4_feedback(feedback, original_caption):
-    prompt = load_prompt('feedback_prompt.txt', 
+def get_gpt4_feedback(feedback, original_caption, feedback_prompt='prompts/feedback_prompt.txt'):
+    prompt = load_prompt(feedback_prompt, 
                         original_caption=original_caption,
                         feedback=feedback)
     
@@ -78,8 +94,8 @@ def get_gpt4_feedback(feedback, original_caption):
     
     return response.choices[0].message.content.strip()
 
-def get_gpt4_caption(feedback, original_caption):
-    prompt = load_prompt('caption_prompt.txt',
+def get_gpt4_caption(feedback, original_caption, caption_prompt='prompts/caption_prompt.txt'):
+    prompt = load_prompt(caption_prompt,
                         original_caption=original_caption,
                         feedback=feedback)
     
@@ -93,6 +109,12 @@ def get_gpt4_caption(feedback, original_caption):
     return response.choices[0].message.content.strip()
 
 def main():
+    # Load configuration
+    args = parse_args()
+    config = load_config(args.config)
+    captions = load_json(config["captions_file"])
+    video_urls = load_json(config["video_urls_file"])
+    
     # Hide sidebar by default
     st.set_page_config(initial_sidebar_state="collapsed")
     
@@ -131,7 +153,7 @@ def main():
         st.session_state.submit_caption_clicked = True
     
     # Select video
-    selected_video = st.selectbox("Select a video:", VIDEO_URLS)
+    selected_video = st.selectbox("Select a video:", video_urls)
     video_id = get_video_id(selected_video)
     
     # Track video changes to reset state
@@ -161,7 +183,13 @@ def main():
     
     # Display instructions
     st.subheader("Instructions")
-    st.write(load_instructions())
+    with st.expander("📜 Instructions (Click to Expand/Collapse)", expanded=True):
+        # Load instructions from file, otherwise throw a warning
+        if "instruction_file" not in config:
+            st.warning("No instruction_file found in the configuration file.")
+        else:
+            st.write(load_instructions(config["instruction_file"]))
+
     
     # Display video
     st.video(selected_video)
@@ -180,7 +208,7 @@ def main():
         current_caption = existing_feedback["final_caption"]
         st.info("Using previously approved caption")
     else:
-        current_caption = SAMPLE_CAPTIONS.get(video_id, "No caption available")
+        current_caption = captions.get(video_id, "No caption available")
     st.write(current_caption)
     
     # Display conversation history
@@ -255,14 +283,14 @@ def main():
                 if st.button("Submit Feedback") and user_feedback:
                     st.session_state.feedback_data["initial_feedback"] = user_feedback
                     # Get GPT-4 polished feedback
-                    gpt_feedback = get_gpt4_feedback(user_feedback, current_caption)
+                    gpt_feedback = get_gpt4_feedback(user_feedback, current_caption, feedback_prompt=args.feedback_prompt)
                     st.session_state.feedback_data["gpt_feedback"] = gpt_feedback
                     st.session_state.current_step = 1
                     st.rerun()
             else:
                 # If happiest face, save and finish
                 st.session_state.feedback_data["final_caption"] = current_caption
-                filename = save_feedback_data(video_id, st.session_state.feedback_data)
+                filename = save_feedback_data(video_id, st.session_state.feedback_data, output_dir=args.output)
                 st.success("Caption rated as perfect! No changes needed.")
                 st.json(st.session_state.feedback_data)
     
@@ -287,7 +315,8 @@ def main():
 
         if score:
             st.session_state.feedback_data["feedback_rating"] = score  # Store in feedback data
-
+            st.session_state.feedback_data["feedback_rating_score"] = emoji_to_score(score)  # Store numeric rating
+            
             if score != "😀":
                 st.write("Please modify the feedback below:")
 
@@ -338,7 +367,7 @@ def main():
         # Get the final feedback (either corrected or GPT's version)
         final_feedback = st.session_state.feedback_data["final_feedback"]
         # Get improved caption
-        gpt_caption = get_gpt4_caption(final_feedback, current_caption)
+        gpt_caption = get_gpt4_caption(final_feedback, current_caption, caption_prompt=args.caption_prompt)
         st.session_state.feedback_data["gpt_caption"] = gpt_caption
         # Move to caption rating step
         st.session_state.current_step = 3
@@ -366,6 +395,7 @@ def main():
 
         if score:
             st.session_state.feedback_data["caption_rating"] = score  # Persist rating
+            st.session_state.feedback_data["caption_rating_score"] = emoji_to_score(score)  # Store numeric rating
 
             if score != "😀":
                 st.write("Please modify the caption below:")
@@ -388,14 +418,14 @@ def main():
                         st.session_state.final_caption = final_caption
                         
                         # Save feedback data
-                        filename = save_feedback_data(st.session_state.feedback_data["video_id"], st.session_state.feedback_data)
+                        filename = save_feedback_data(st.session_state.feedback_data["video_id"], st.session_state.feedback_data, output_dir=args.output)
                         st.success(f"Feedback saved successfully!")
                         st.json(st.session_state.feedback_data)
 
             else:
                 # If rating is happy, finalize caption and save
                 st.session_state.feedback_data["final_caption"] = st.session_state.feedback_data["gpt_caption"]
-                filename = save_feedback_data(st.session_state.feedback_data["video_id"], st.session_state.feedback_data)
+                filename = save_feedback_data(st.session_state.feedback_data["video_id"], st.session_state.feedback_data, output_dir=args.output)
                 st.success(f"Feedback saved successfully!")
                 st.json(st.session_state.feedback_data)
 
