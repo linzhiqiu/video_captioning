@@ -2,7 +2,7 @@
     "name": "Spatial Framing and Dynamics (Test Purpose)",
     "timestamp": "2025-02-10",
     "instruction_file": "human/spatial_framing_dynamics.txt",
-    "output_directory": "outputs/",
+    "output_name": "spatial_framing_dynamics_test",
     "video_urls_file": "test_urls.json",
     "captions_file": "test_captions.json"
 }

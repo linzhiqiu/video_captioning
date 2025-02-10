@@ -2,7 +2,7 @@
     "name": "Subject Description (Test Purpose)",
     "timestamp": "2025-02-10",
     "instruction_file": "human/subject_description.txt",
-    "output_directory": "outputs/",
+    "output_name": "subject_description_test",
     "video_urls_file": "test_urls.json",
     "captions_file": "test_captions.json"
 }

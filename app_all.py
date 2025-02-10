@@ -14,7 +14,7 @@ if 'api_key' not in st.session_state:
 # Argument parsing
 def parse_args():
     parser = argparse.ArgumentParser(description="Video Caption Feedback System")
-    parser.add_argument("--config", type=str, default="configs/camera_framing_dynamics_test.json", help="Path to the JSON config file")
+    parser.add_argument("--configs", type=str, default="test_configs.json", help="Path to the JSON config file")
     parser.add_argument("--output", type=str, default="outputs", help="Path to the output directory")
     parser.add_argument("--feedback_prompt", type=str, default="prompts/feedback_prompt.txt", help="Path to the feedback prompt file")
     parser.add_argument("--caption_prompt", type=str, default="prompts/caption_prompt.txt", help="Path to the caption prompt file")
@@ -111,17 +111,10 @@ def get_gpt4_caption(feedback, original_caption, caption_prompt='prompts/caption
 def main():
     # Load configuration
     args = parse_args()
-    config = load_config(args.config)
-    captions = load_json(config["captions_file"])
-    video_urls = load_json(config["video_urls_file"])
-    output_dir = os.path.join(args.output, config["output_name"])
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
     
     # Hide sidebar by default
     st.set_page_config(initial_sidebar_state="collapsed")
     
-    st.title("Video Caption Feedback System")
     
     # Debug information
     st.sidebar.header("Debug Information")
@@ -138,13 +131,60 @@ def main():
     if not st.session_state.api_key:
         st.warning("Please enter your OpenAI API key to proceed.")
         return
+
+    try:
+        configs = load_config(args.configs)
+        configs = [load_config(config) for config in configs]
+    except FileNotFoundError:
+        st.error(f"Config file not found: {args.config}")
+        return
+    
+    config_dict = {config["name"]: config for config in configs}
+    config_names = list(config_dict.keys())
+    # Dropdown to select a config, updating session state
+    selected_config = st.selectbox(
+        "Select a task:",
+        config_names, 
+        # index=config_names.index(st.session_state.selected_config),
+        # key="config_selector"
+    )
+    
+    # Track task changes to reset state
+    if 'last_config_id' not in st.session_state:
+        st.session_state.last_config_id = selected_config
+    elif st.session_state.last_config_id != selected_config:
+        # Config changed, reset all state variables
+        # First, collect all keys to remove
+        keys_to_remove = []
+        for key in st.session_state:
+            # Keep api_key and last_config_id
+            if key not in ['api_key', 'last_config_id']:
+                keys_to_remove.append(key)
+        
+        # Remove all collected keys
+        for key in keys_to_remove:
+            del st.session_state[key]
+        
+        # Set the new video id
+        st.session_state.last_config_id = selected_config
+        
+        st.rerun()  # Force a rerun to ensure clean state
+
+
+    config = config_dict[selected_config]
+    st.title(config.get("name", "Video Caption Feedback System"))
+    captions = load_json(config["captions_file"])
+    video_urls = load_json(config["video_urls_file"])
+    output_dir = os.path.join(args.output, config["output_name"])
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     
     # Session state initialization
     if 'current_step' not in st.session_state:
         st.session_state.current_step = 0
     if 'feedback_data' not in st.session_state:
         st.session_state.feedback_data = {}
-
+    
     # Select video
     selected_video = st.selectbox("Select a video:", video_urls)
     video_id = get_video_id(selected_video)
@@ -158,7 +198,7 @@ def main():
         keys_to_remove = []
         for key in st.session_state:
             # Keep api_key and last_video_id
-            if key not in ['api_key', 'last_video_id']:
+            if key not in ['api_key', 'last_config_id', 'selected_config', 'last_video_id']:
                 keys_to_remove.append(key)
         
         # Remove all collected keys
@@ -237,9 +277,9 @@ def main():
         else:
             initial_rating_response = streamlit_feedback(
                 feedback_type="faces",
-                # key="initial_caption_faces"
-                key=f"initial_caption_faces_{video_id}"
+                key=f"initial_caption_faces_{video_id}_{config['name']}"
             )
+
             if initial_rating_response and 'score' in initial_rating_response:
                 st.session_state.initial_caption_rating = initial_rating_response['score']
                 score = initial_rating_response['score']
