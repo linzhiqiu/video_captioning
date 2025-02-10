@@ -1,4 +1,4 @@
-Given a video caption and user feedback, please analyze and provide a polished version of the feedback that maintains the core message but improves clarity and professionalism.
+Given a video caption and user feedback, please analyze and provide a polished version of the feedback that maintains the core message but improves clarity and professionalism. Note that the user feedback could be poorly written or very brief, so please try your best to guess what it means.
 
 Original caption: "{original_caption}"
 User feedback: "{feedback}"

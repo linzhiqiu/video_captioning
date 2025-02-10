@@ -163,37 +163,69 @@ def main():
     # Step 1: Rate GPT's feedback and optionally provide corrected feedback
     elif st.session_state.current_step == 1:
         st.subheader("Rate AI-Polished Feedback")
-        
-        feedback_response = streamlit_feedback(
-            feedback_type="faces",
-            key="feedback_faces"
-        )
-        
-        if feedback_response and 'score' in feedback_response:
-            score = feedback_response['score']
-            st.session_state.feedback_data["feedback_rating"] = score
-            
+
+        # Fetch stored feedback rating if it exists
+        if "feedback_rating" in st.session_state:
+            score = st.session_state.feedback_rating
+        else:
+            feedback_response = streamlit_feedback(
+                feedback_type="faces",
+                key="feedback_faces"
+            )
+
+            if feedback_response and 'score' in feedback_response:
+                st.session_state.feedback_rating = feedback_response['score']
+                score = feedback_response['score']
+            else:
+                score = None  # Default to None if no response yet
+
+        if score:
+            st.session_state.feedback_data["feedback_rating"] = score  # Store in feedback data
+
             if score != "😀":
                 st.write("Please modify the feedback below:")
+
+                # Ensure final_feedback is stored persistently
+                if "final_feedback" not in st.session_state:
+                    st.session_state.final_feedback = st.session_state.feedback_data["gpt_feedback"]
+
                 final_feedback = st.text_area(
                     "Correct feedback:",
-                    value=st.session_state.feedback_data["gpt_feedback"],
+                    value=st.session_state.final_feedback,
                     key="correct_feedback"
                 )
-                st.button("Submit Corrected Feedback", on_click=on_feedback_submit)
-                
-                if st.session_state.submit_feedback_clicked and final_feedback:
-                    # Reset the button state
-                    st.session_state.submit_feedback_clicked = False
-                    # Save the feedback and move to next step
-                    st.session_state.feedback_data["final_feedback"] = final_feedback
-                    st.session_state.current_step = 2
-                    st.rerun()
+
+                # Button Click Handling
+                if st.button("Submit Corrected Feedback"):
+                    print("Button clicked")
+                    if final_feedback.strip():
+                        # Persist final feedback
+                        st.session_state.feedback_data["final_feedback"] = final_feedback
+                        st.session_state.final_feedback = final_feedback
+                        
+                        # Store step change in session state
+                        st.session_state.current_step = 2
+                        st.session_state.feedback_submitted = True  # Flag to track submission
+
+                        st.rerun()  # Force rerun
+                    else:
+                        st.warning("Please provide a corrected feedback before submitting.")
+                        st.rerun()
             else:
-                # Use GPT's feedback as final
+                # If rating is happy, then directly use the GPT feedback as final feedback
                 st.session_state.feedback_data["final_feedback"] = st.session_state.feedback_data["gpt_feedback"]
                 st.session_state.current_step = 2
-                st.rerun()
+                st.session_state.feedback_submitted = True  # Flag to track submission
+
+        # Ensure we move to the next step on rerun
+        if st.session_state.get("feedback_submitted", False):
+            st.session_state.feedback_submitted = False  # Reset flag
+            st.session_state.current_step = 2  # Ensure next step persists
+            st.rerun()
+
+
+
+
     
     # Step 2: Generate caption (intermediate step)
     elif st.session_state.current_step == 2:
@@ -210,44 +242,67 @@ def main():
     elif st.session_state.current_step == 3:
         st.subheader("Rate AI-Improved Caption")
         st.write(st.session_state.feedback_data["gpt_caption"])
-        
-        caption_response = streamlit_feedback(
-            feedback_type="faces",
-            key="caption_faces"
-        )
-        
-        if caption_response and 'score' in caption_response:
-            score = caption_response['score']
-            st.session_state.feedback_data["caption_rating"] = score
-            
+
+        # Retrieve stored caption rating if it exists
+        if "caption_rating" in st.session_state:
+            score = st.session_state.caption_rating
+        else:
+            caption_response = streamlit_feedback(
+                feedback_type="faces",
+                key="caption_faces"
+            )
+
+            if caption_response and 'score' in caption_response:
+                st.session_state.caption_rating = caption_response['score']
+                score = caption_response['score']
+            else:
+                score = None  # Default to None if no response yet
+
+        if score:
+            st.session_state.feedback_data["caption_rating"] = score  # Persist rating
+
             if score != "😀":
                 st.write("Please modify the caption below:")
+
+                # Ensure final_caption is stored persistently
+                if "final_caption" not in st.session_state:
+                    st.session_state.final_caption = st.session_state.feedback_data["gpt_caption"]
+
                 final_caption = st.text_area(
                     "Correct caption:",
-                    value=st.session_state.feedback_data["gpt_caption"],
+                    value=st.session_state.final_caption,
                     key="correct_caption"
                 )
-                st.button("Submit Final Caption", on_click=on_caption_submit)
-                
-                if st.session_state.submit_caption_clicked and final_caption:
-                    # Reset the button state
-                    st.session_state.submit_caption_clicked = False
-                    # Save the caption and complete the process
-                    st.session_state.feedback_data["final_caption"] = final_caption
-                    filename = save_feedback_data(video_id, st.session_state.feedback_data)
-                    st.success(f"Feedback saved successfully to {filename}")
-                    # Reset the session state for new feedback
-                    st.session_state.current_step = 0
-                    st.session_state.feedback_data = {}
-                    st.rerun()
+
+                # Button Click Handling
+                if st.button("Submit Final Caption"):
+                    if final_caption.strip():
+                        # Persist final caption
+                        st.session_state.feedback_data["final_caption"] = final_caption
+                        st.session_state.final_caption = final_caption
+                        
+                        # Save feedback data
+                        filename = save_feedback_data(st.session_state.feedback_data["video_id"], st.session_state.feedback_data)
+                        st.success(f"Feedback saved successfully to {filename}")
+
+                        # Reset session state for new feedback cycle
+                        st.session_state.current_step = 0
+                        st.session_state.feedback_data = {}
+                        st.session_state.caption_rating = None  # Clear rating state
+                        st.rerun()
+
             else:
+                # If rating is happy, finalize caption and save
                 st.session_state.feedback_data["final_caption"] = st.session_state.feedback_data["gpt_caption"]
-                filename = save_feedback_data(video_id, st.session_state.feedback_data)
+                filename = save_feedback_data(st.session_state.feedback_data["video_id"], st.session_state.feedback_data)
                 st.success(f"Feedback saved successfully to {filename}")
-                # Reset the session state for new feedback
+
+                # Reset session state for new feedback cycle
                 st.session_state.current_step = 0
                 st.session_state.feedback_data = {}
+                st.session_state.caption_rating = None  # Clear rating state
                 st.rerun()
+
 
 if __name__ == "__main__":
     main()
