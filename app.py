@@ -107,6 +107,21 @@ def get_gpt4_caption(feedback, original_caption, caption_prompt='prompts/caption
     
     return response.choices[0].message.content.strip()
 
+def get_video_format_func(output_dir):
+    def video_format_func(video_url):
+        # if already exists, then return f"✅ {video_url}"
+        video_id = get_video_id(video_url)
+        # Check for existing feedback and get current caption
+        existing_feedback = load_feedback_data(video_id, output_dir=output_dir)
+        
+        # Show existing feedback if available
+        if existing_feedback:
+            return f"✅ {video_url}"
+        return video_url
+    return video_format_func
+    
+    
+
 def main():
     # Load configuration
     args = parse_args()
@@ -140,7 +155,7 @@ def main():
     
 
     # Select video
-    selected_video = st.selectbox("Select a video:", video_urls)
+    selected_video = st.selectbox("Select a video:", video_urls, format_func=get_video_format_func(output_dir))
     video_id = get_video_id(selected_video)
     
     # Track video changes to reset state
