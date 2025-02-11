@@ -1,7 +1,3 @@
-Here's your polished **README** explaining the workflow of your **Video Caption Feedback App** in a clear and professional manner:
-
----
-
 # 📌 Video Caption Feedback App
 
 This is a **Streamlit-based web app** for **evaluating and improving video captions**. It allows users to provide structured feedback on AI-generated or human-annotated captions, refining them through an iterative process.
