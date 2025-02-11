@@ -178,11 +178,6 @@ def main():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
-    # Session state initialization
-    if 'current_step' not in st.session_state:
-        st.session_state.current_step = 0
-    if 'feedback_data' not in st.session_state:
-        st.session_state.feedback_data = {}
     
     # Select video
     selected_video = st.selectbox("Select a video:", video_urls)
@@ -213,6 +208,12 @@ def main():
         
         st.rerun()  # Force a rerun to ensure clean state
     
+    # Session state initialization
+    if 'current_step' not in st.session_state:
+        st.session_state.current_step = 0
+    if 'feedback_data' not in st.session_state:
+        st.session_state.feedback_data = {}
+
     # Display instructions
     st.subheader("Instructions")
     with st.expander("📜 Instructions (Click to Expand/Collapse)", expanded=True):
@@ -364,7 +365,6 @@ def main():
 
                 # Button Click Handling
                 if st.button("Submit Corrected Feedback"):
-                    print("Button clicked")
                     if final_feedback.strip():
                         # Persist final feedback
                         st.session_state.feedback_data["final_feedback"] = final_feedback

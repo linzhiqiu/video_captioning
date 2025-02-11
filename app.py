@@ -138,11 +138,6 @@ def main():
         st.warning("Please enter your OpenAI API key to proceed.")
         return
     
-    # Session state initialization
-    if 'current_step' not in st.session_state:
-        st.session_state.current_step = 0
-    if 'feedback_data' not in st.session_state:
-        st.session_state.feedback_data = {}
 
     # Select video
     selected_video = st.selectbox("Select a video:", video_urls)
@@ -173,6 +168,12 @@ def main():
         
         st.rerun()  # Force a rerun to ensure clean state
     
+    # Session state initialization
+    if 'current_step' not in st.session_state:
+        st.session_state.current_step = 0
+    if 'feedback_data' not in st.session_state:
+        st.session_state.feedback_data = {}
+
     # Display instructions
     st.subheader("Instructions")
     with st.expander("📜 Instructions (Click to Expand/Collapse)", expanded=True):

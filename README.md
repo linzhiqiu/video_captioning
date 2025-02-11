@@ -28,6 +28,8 @@ The Streamlit app should now be running and accessible in your browser! 🎉
 
 ---
 
+[image.png](image.png)
+
 ## 🏗️ Workflow Overview
 
 1️⃣ **Original Caption Display**  
