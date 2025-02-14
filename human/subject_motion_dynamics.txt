@@ -1,4 +1,3 @@
-
 Provide a concise yet informative description of the subject motion in this video. Please note that order matters! If multiple actions occur, present them in chronological order (e.g., "The bird first takes flight, then soars in a circle, and finally lands on a branch").
 
 #### 1. Individual Subject Actions  

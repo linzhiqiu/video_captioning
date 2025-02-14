@@ -1,0 +1,8 @@
+{
+    "name": "Spatial Framing and Dynamics Vanilla Policy (Test Purpose)",
+    "timestamp": "2025-02-12",
+    "instruction_file": "human/spatial_framing_dynamics_vanilla.txt",
+    "output_name": "spatial_framing_dynamics_vanilla_test",
+    "video_urls_file": "test_urls.json",
+    "captions_file": "test_captions.json"
+}

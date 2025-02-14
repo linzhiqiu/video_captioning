@@ -148,7 +148,7 @@ def main():
         configs = load_config(args.configs)
         configs = [load_config(config) for config in configs]
     except FileNotFoundError:
-        st.error(f"Config file not found: {args.config}")
+        st.error(f"Config file not found: {args.configs}")
         return
     
     config_dict = {config["name"]: config for config in configs}
